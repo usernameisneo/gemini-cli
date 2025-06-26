@@ -6,28 +6,31 @@
 
 import { AuthClient } from 'google-auth-library';
 import {
-  LoadCodeAssistResponse,
+  CodeAssistGlobalUserSettingResponse,
+  GetCodeAssistGlobalUserSettingRequest,
   LoadCodeAssistRequest,
-  OnboardUserRequest,
+  LoadCodeAssistResponse,
   LongrunningOperationResponse,
+  OnboardUserRequest,
+  SetCodeAssistGlobalUserSettingRequest,
 } from './types.js';
 import {
-  GenerateContentResponse,
-  GenerateContentParameters,
   CountTokensParameters,
-  EmbedContentResponse,
   CountTokensResponse,
   EmbedContentParameters,
+  EmbedContentResponse,
+  GenerateContentParameters,
+  GenerateContentResponse,
 } from '@google/genai';
 import * as readline from 'readline';
 import { ContentGenerator } from '../core/contentGenerator.js';
 import {
+  CaCountTokenResponse,
   CaGenerateContentResponse,
-  toGenerateContentRequest,
+  fromCountTokenResponse,
   fromGenerateContentResponse,
   toCountTokenRequest,
-  fromCountTokenResponse,
-  CaCountTokenResponse,
+  toGenerateContentRequest,
 } from './converter.js';
 import { PassThrough } from 'node:stream';
 
@@ -89,6 +92,24 @@ export class CodeAssistServer implements ContentGenerator {
   ): Promise<LoadCodeAssistResponse> {
     return await this.callEndpoint<LoadCodeAssistResponse>(
       'loadCodeAssist',
+      req,
+    );
+  }
+
+  async getCodeAssistGlobalUserSetting(
+    req: GetCodeAssistGlobalUserSettingRequest,
+  ): Promise<CodeAssistGlobalUserSettingResponse> {
+    return await this.callEndpoint<CodeAssistGlobalUserSettingResponse>(
+      'getCodeAssistGlobalUserSetting',
+      req,
+    );
+  }
+
+  async setCodeAssistGlobalUserSetting(
+    req: SetCodeAssistGlobalUserSettingRequest,
+  ): Promise<CodeAssistGlobalUserSettingResponse> {
+    return await this.callEndpoint<CodeAssistGlobalUserSettingResponse>(
+      'setCodeAssistGlobalUserSetting',
       req,
     );
   }
