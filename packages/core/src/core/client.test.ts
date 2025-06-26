@@ -403,4 +403,125 @@ describe('Gemini Client (client.ts)', () => {
       expect(finalResult).toBeInstanceOf(Turn);
     });
   });
+
+  describe('tryCompressChat', () => {
+    let mockChat: GeminiChat;
+    let mockGenerator: ContentGenerator;
+
+    beforeEach(() => {
+      // Mock GeminiChat
+      mockChat = {
+        getHistory: vi.fn(),
+        setHistory: vi.fn(),
+      } as unknown as GeminiChat;
+      client['getChat'] = vi.fn().mockReturnValue(mockChat);
+
+      // Mock ContentGenerator
+      mockGenerator = {
+        countTokens: vi.fn(),
+      } as unknown as ContentGenerator;
+      client['getContentGenerator'] = vi.fn().mockReturnValue(mockGenerator);
+
+      // Mock summarizeHistory to avoid actual API calls
+      client['summarizeHistory'] = vi
+        .fn()
+        .mockResolvedValue({ role: 'user', parts: [{ text: 'Summary' }] });
+    });
+
+    it('should do nothing for empty history', async () => {
+      vi.mocked(mockChat.getHistory).mockReturnValue([]);
+      const result = await client.tryCompressChat();
+      expect(result).toBeNull();
+      expect(mockGenerator.countTokens).not.toHaveBeenCalled();
+    });
+
+    it('should not compress if token/history length is below threshold', async () => {
+      const history = [{ role: 'user', parts: [{ text: 'hello' }] }];
+      vi.mocked(mockChat.getHistory).mockReturnValue(history);
+      vi.mocked(mockGenerator.countTokens).mockResolvedValue({
+        totalTokens: 100,
+      });
+      // Mock tokenLimit to return a high value
+      vi.mock('./tokenLimits', () => ({
+        tokenLimit: () => 10000,
+      }));
+
+      const result = await client.tryCompressChat();
+      expect(result).toBeNull();
+    });
+
+    it('should compress if force is true', async () => {
+      const history = [{ role: 'user', parts: [{ text: 'hello' }] }];
+      vi.mocked(mockChat.getHistory).mockReturnValue(history);
+      vi.mocked(mockGenerator.countTokens)
+        .mockResolvedValueOnce({ totalTokens: 100 }) // Original
+        .mockResolvedValueOnce({ totalTokens: 10 }); // After summary
+
+      const result = await client.tryCompressChat(true);
+
+      expect(result).toEqual({
+        originalTokenCount: 100,
+        newTokenCount: 10,
+      });
+      expect(client['summarizeHistory']).toHaveBeenCalledWith(history);
+      expect(mockChat.setHistory).toHaveBeenCalledWith([
+        { role: 'user', parts: [{ text: 'Summary' }] },
+      ]);
+    });
+
+    it('should compress if token count exceeds model limit', async () => {
+      const history = Array(5).fill({
+        role: 'user',
+        parts: [{ text: 'a message' }],
+      });
+      vi.mocked(mockChat.getHistory).mockReturnValue(history);
+      vi.mocked(mockGenerator.countTokens)
+        .mockResolvedValueOnce({ totalTokens: 9500 }) // Original
+        .mockResolvedValueOnce({ totalTokens: 10 }); // After summary
+      vi.mock('./tokenLimits', () => ({
+        tokenLimit: () => 10000,
+      }));
+
+      const result = await client.tryCompressChat();
+
+      expect(result).not.toBeNull();
+      expect(client['summarizeHistory']).toHaveBeenCalled();
+    });
+
+    it('should perform rolling summary if history is too long', async () => {
+      const history = Array(15).fill({
+        role: 'user',
+        parts: [{ text: 'a message' }],
+      });
+      vi.mocked(mockChat.getHistory).mockReturnValue(history);
+      vi.mocked(mockGenerator.countTokens)
+        .mockResolvedValueOnce({ totalTokens: 100 }) // Original
+        .mockResolvedValueOnce({ totalTokens: 50 }); // After summary
+      vi.mock('./tokenLimits', () => ({
+        tokenLimit: () => 10000,
+      }));
+
+      const result = await client.tryCompressChat();
+
+      expect(result).not.toBeNull();
+      const turnsToSummarize = history.slice(0, 5);
+      const remainingHistory = history.slice(5);
+      expect(client['summarizeHistory']).toHaveBeenCalledWith(turnsToSummarize);
+      expect(mockChat.setHistory).toHaveBeenCalledWith([
+        { role: 'user', parts: [{ text: 'Summary' }] },
+        ...remainingHistory,
+      ]);
+    });
+
+    it('should not compress if token count is unavailable', async () => {
+      const history = [{ role: 'user', parts: [{ text: 'hello' }] }];
+      vi.mocked(mockChat.getHistory).mockReturnValue(history);
+      vi.mocked(mockGenerator.countTokens).mockResolvedValue({
+        totalTokens: undefined,
+      });
+
+      const result = await client.tryCompressChat();
+      expect(result).toBeNull();
+    });
+  });
 });
