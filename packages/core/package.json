@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node dist/src/index.js",
     "build": "node ../../scripts/build_package.js",
-    "clean": "rm -rf dist",
+    "clean": "powershell -Command \"if (Test-Path dist) { Remove-Item -Recurse -Force dist }\"",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "vitest run",
